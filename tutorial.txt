@@ -1,0 +1,251 @@
+             Android
+        WebSocket Server
+          /          \
+         /            \
+        ▼              ▼
+ HTML Dashboard   Python YOLO
+
+Python receives a frame.
+
+Frame
+
+↓
+
+YOLO
+
+↓
+
+Person
+
+***************
+Change done in my Kotlin App
+***************
+private val clients = mutableSetOf<WebSocket>()
+
+// Update of the WebSocket server
+override fun onOpen(conn: WebSocket, handshake: ClientHandshake) {
+    Log.d("WebSocketServer", "Client connected")
+
+    synchronized(clients) {
+        clients.add(conn)
+    }
+}
+
+override fun onClose(conn: WebSocket, code: Int, reason: String, remote: Boolean) {
+
+    synchronized(clients) {
+        clients.remove(conn)
+    }
+
+    Log.d("WebSocketServer", "Client disconnected")
+}
+
+// Send to evrey client
+if (now - lastFrameSent >= frameInterval) {
+
+    try {
+        val stream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, stream)
+
+        val frame = stream.toByteArray()
+
+        synchronized(clients) {
+            clients.removeAll { !it.isOpen }
+
+            clients.forEach { client ->
+                client.send(frame)
+            }
+        }
+
+        lastFrameSent = now
+
+    } catch (e: Exception) {
+        Log.e("DetectionActivity", "Error sending frame", e)
+    }
+}
+
+***************
+Python Part
+***************
+
+Create a Python project
+
+Create a folder:
+ai-client/
+│
+├── main.py
+└── venv/
+
+
+cd C:\Applications\toto>
+// Check your python (other useful commands: where.exe python and  where.exe py)
+py --version
+
+Create a virtual environment:
+py -3 -m venv venv
+
+// or this command: python -m venv venv
+
+// Activate it.
+.\venv\Scripts\Activate.ps1
+
+Step 2 - Install packages
+
+For now you only need one package.
+
+pip install websocket-client
+
+Step 3 - Create main.py in ai-client folder
+------------------------
+import websocket
+
+PHONE_IP = "192.168.X.X"   # Replace with your phone's IP
+
+print("Connecting to phone...")
+
+ws = websocket.WebSocket()
+ws.connect(f"ws://{PHONE_IP}:8080")
+
+print("Connected!")
+
+while True:
+    frame = ws.recv()
+
+    if isinstance(frame, bytes):
+        print(f"Received frame: {len(frame)} bytes")
+    else:
+        print("Received text:", frame)
+-------------------------
+
+// Execute the main.py
+
+ python main.py
+
+// Output
+Connecting to phone...
+Connected!
+Received frame: 39248 bytes
+Received frame: 39505 bytes
+Received frame: 38449 bytes
+Received frame: 39765 bytes
+Received frame: 29654 bytes
+Received frame: 33850 bytes
+
+
+// Let analyze a photo (frame)
+-------------
+import websocket
+
+PHONE_IP = "192.168.1.15" // replace with you IP phone
+
+ws = websocket.WebSocket()
+ws.connect(f"ws://{PHONE_IP}:8080")
+
+print("Connected!")
+
+frame = ws.recv()
+
+with open("frame.jpg", "wb") as f:
+    f.write(frame)
+
+print("frame.jpg saved!")
+
+ws.close()
+-------------
+
+
+ python main.py
+
+// You should see a new file : frame.jpg
+
+*** Image Analysis *****
+
+pip install ultralytics
+
+
+// Add this code to your main.py
+-------------
+from ultralytics import YOLO
+
+model = YOLO("yolo11n.pt")
+
+results = model("frame.jpg")
+
+for result in results:
+    for box in result.boxes:
+        print(model.names[int(box.cls)])
+-------------
+
+// Output
+Connected!
+frame.jpg saved!
+
+image 1/1 C:\Applications\bobo\ai-client\frame.jpg: 640x352 1 horse, 280.8ms
+Speed: 15.5ms preprocess, 280.8ms inference, 2.5ms postprocess per image at shape (1, 3, 640, 352)
+horse
+
+
+**************
+Real time video analysis
+**************
+
+pip install opencv-python numpy
+
+// Replace main.py with this:
+
+--------------------
+
+import websocket
+import numpy as np
+import cv2
+
+from ultralytics import YOLO
+
+PHONE_IP = "192.168.X.X"
+
+model = YOLO("yolo11n.pt")
+
+ws = websocket.WebSocket()
+ws.connect(f"ws://{PHONE_IP}:8080")
+
+print("Connected!")
+
+while True:
+
+    frame = ws.recv()
+
+    if not isinstance(frame, bytes):
+        continue
+
+    # JPEG bytes -> numpy array
+    nparr = np.frombuffer(frame, np.uint8)
+
+    # numpy -> OpenCV image
+    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    if image is None:
+        continue
+
+    results = model(image, verbose=False)
+
+    for result in results:
+        for box in result.boxes:
+
+            cls = int(box.cls)
+            conf = float(box.conf)
+
+            print(model.names[cls], round(conf, 2))
+
+
+--------------------
+
+
+
+
+
+
+
+
+
+
+
